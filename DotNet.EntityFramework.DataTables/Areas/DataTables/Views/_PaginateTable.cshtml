@@ -1,0 +1,238 @@
+﻿@{
+    Layout = null;
+}
+
+@model DataTables.AspNetCore.Models.PaginateTableViewModel
+
+@{
+    string tableId = "table-" + Model.datatableNo;
+}
+
+
+<style>
+    .datatable-scroll {
+        overflow-x: auto;
+    }
+</style>
+<table class="table table-striped table-condensed @Model.Class datatable" style="width:100%;@Model.Style" id="@tableId">
+    <thead class="bold">
+        <tr>
+            @foreach (var item in Model.type.GetProperties().Where(x => !x.Name.StartsWith("hidden") && !Model.hiddenColumns.Contains(x.Name)))
+            {
+                if (Model.listProperties.Any(x => x.Key == item.Name))
+                {
+                    <td>@Model.listProperties.First(x => x.Key == item.Name).Value</td>
+                }
+                else
+                {
+                    <td>@item.Name</td>
+                }
+            }
+        </tr>
+    </thead>
+    <tbody></tbody>
+    @*<tfoot><tr><td class="bold">Toplam:</td><td class="bold">12</td><td class="bold">22</td><td class="bold">88</td></tr></tfoot>*@
+</table>
+<script>
+    var DataTableFilterActive@{<text>@Model.datatableNo</text>} = @Model.FilterChangeActive.ToString().ToLower();
+
+    $(document).ready(function () {
+        $('#@tableId').DataTable({
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            'bProcessing': true,
+            "processing": true,
+            'bServerSide': true,
+            "order": [[@Model.datatablesSettings.iSortCol, '@(((int)Model.datatablesSettings.iSortDir) == 0 ? "asc" : "desc")']],
+            //"bDestroy": true,
+            ajax: "data.json",
+            'sAjaxSource': '@Model.url',
+            "fnServerData": function (sSource, aoData, fnCallback, oSettings) {
+                var filterArray = [];
+                $.each($('#datatable-form-@Model.datatableNo').find('input, select'), function (index, element) {
+                    var attr =  $(element).attr('data-filter-for');
+                    if (typeof attr !== typeof undefined && attr !== false) {
+                        if ($(element).attr('type') === "radio") {
+                            if ($(element).prop('checked'))
+                                filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                        } else {
+                            filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                            }
+                    }
+                });
+
+                $.ajax({
+                    "dataType": 'json',
+                    "type": "POST",
+                    "url": sSource,
+                    "data": { settings: JSON.stringify(aoData), filterData: filterArray },
+                    "success": function (aoData) {
+                        //$('.spnNewProjects').html($('#tblNewProjects').DataTable().data().length)
+                        var DateList = [@Html.Raw(String.Join(",", Model.type.GetProperties().Where(x=> x.PropertyType == typeof(DateTime)).Select(x=> x.Name).ToList().Select(x => "\"" + x + "\"")))];
+
+                        @if (!String.IsNullOrEmpty(Model.CountSelector))
+                        {
+                            <text>
+                                $('@Model.CountSelector').html(aoData.iTotalRecords)
+                            </text>
+                         }
+                        //debugger;
+
+                        if(typeof(aoData.footerDataList) != 'undefined' &&  aoData.footerDataList != null && aoData.footerDataList.length > 0 )
+                        {
+                            if($('#@tableId').find('tfoot').length ==0)
+                                $('#@tableId').append('<tfoot></tfoot>');
+
+                            var AppendString = "<tr>";
+                            var startIndex = 0;
+                            $.each(aoData.footerDataList,function(index,value){
+
+                                while(value.Index > startIndex ){
+                                    AppendString += "<td></td>";
+                                    startIndex++;
+                                }
+                                AppendString += "<td>"+value.Value+"</td>";
+                                startIndex++;
+                            });
+                            AppendString += "</tr>";
+                            $('#@tableId').find('tfoot').html(AppendString);
+                        }
+                        else
+                        {
+                            $('#@tableId').find('tfoot').html("");
+                        }
+
+                        var json = JSON.parse(JSON.stringify(aoData), function (key, value) {
+                            if (typeof value === 'string') {
+                                return DateList.indexOf(key) !== -1 ? new Date(value).toLocaleString() : value;
+                            }
+                            //if (typeof value === 'string') {
+                            //    console.log(value);
+                            //    if (value.endsWith("html:")) {
+                            //        var tmpArray = value.split(':');
+                            //        console.log(tmpArray);
+                            //        return tmpArray[1].replace('HTML', tmpArray[0]);
+                            //    }
+                            //}
+                            return value;
+                        });
+                        fnCallback(json);
+                    },
+                    complete: function () {
+                        $('#table-@Model.datatableNo').find('select').select2();
+                    },
+                });
+            },
+            columns: [
+                @foreach (var item in Model.type.GetProperties().Where(x=> !x.Name.StartsWith("hidden") && !Model.hiddenColumns.Contains(x.Name)))
+                {
+                    @Html.Raw("{ 'data': '" + item.Name + "' },");
+            }
+            ],
+
+        });
+
+        var timeOutDelay = null;
+        $('#datatable-form-@Model.datatableNo').find('input, select').change(function () {
+            if(DataTableFilterActive@{<text>@Model.datatableNo</text>}){
+                if (timeOutDelay != null)
+                    clearTimeout(timeOutDelay);
+
+                timeOutDelay = setTimeout(function () {
+                    $('#@tableId').dataTable().fnStandingRedraw();
+                }, 50);
+            }
+        });
+
+        $('#datatable-form-@Model.datatableNo').on("keypress", ":input:not(textarea)", function(event) {
+            if (event.keyCode == 13) {
+                event.preventDefault();
+            }
+        });
+
+    });
+
+    $('[name=table-@(Model.datatableNo)_length]').select2()
+
+</script>
+
+@if (Model.ExcelActive)
+{
+    <script>
+        var ExcelElement = $('#frm-excel-@tableId');
+        $('#@(tableId)_filter').parent().parent().find('.dataTables_length').append(ExcelElement.clone());
+        ExcelElement.remove();
+
+        $('#frm-excel-@tableId').submit(function () {
+            var tableId = $(this).attr("data-table-id");
+            var obj = $('#' + tableId).dataTable().fnSettings().oAjaxData;
+            var arr = [];
+            for (var key in obj) {
+                if (obj.hasOwnProperty(key)) {
+                    tmp = {};
+                    tmp.name = key;
+                    tmp.value = obj[key];
+                    arr.push(tmp);
+                }
+            };
+            var result = arr.join(',');
+
+            var filterArray = [];
+            $.each($('#datatable-form-' + $(this).attr("data-table-no")).find('input, select'), function (index, element) {
+                var attr =  $(element).attr('data-filter-for');
+                if (typeof attr !== typeof undefined && attr !== false) {
+                    if ($(element).attr('type') === "radio" && $(element).prop('checked')) {
+                        filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                    } else {
+                        filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                    }
+                }
+            });
+
+
+
+            $(this).find('.input-array').remove();
+
+            for (var i = 0; i < filterArray.length; i++) {
+                $(this).append(' <input type="hidden" class="input-array"  name="filterData[' + i + '][filterFor]" value="' + filterArray[i].filterFor + '" />')
+                $(this).append(' <input type="hidden" class="input-array"  name="filterData[' + i + '][fiterType]" value="' + filterArray[i].fiterType + '" />')
+                $(this).append(' <input type="hidden" class="input-array"  name="filterData[' + i + '][dataType]" value="' + filterArray[i].dataType + '" />')
+                $(this).append(' <input type="hidden" class="input-array"  name="filterData[' + i + '][value]" value="' + filterArray[i].value + '" />')
+            }
+
+            $(this).find('#settings').val(JSON.stringify(arr));
+            $(this).find('#filterData').val(JSON.stringify(filterArray));
+            return true;
+        });
+        function DatatablesToExcel(TableId, url) {
+            var filterArray = [];
+            $.each($('#datatable-form-@Model.datatableNo').find('input, select'), function (index, element) {
+                if ($(element).attr('type') === "radio" && $(element).prop('checked')) {
+                    filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                } else {
+                    filterArray.push({ filterFor: $(element).attr("data-filter-for"), fiterType: $(element).attr("data-filter-type"), value: $(element).val(), dataType: $(element).attr("data-type") });
+                }
+            });
+
+            var form = document.createElement("form-test");
+            form.setAttribute("id", "bla");
+            form.setAttribute("method", "post");
+            form.setAttribute("action", url);
+            form.setAttribute("style", "display: none;");
+
+            var hiddenField = document.createElement("input");
+            hiddenField.setAttribute("name", "settings");
+            hiddenField.setAttribute("value", JSON.stringify($('#table-1').dataTable().fnSettings().oAjaxData));
+            form.appendChild(hiddenField);
+            document.body.appendChild(form);
+            $('#form-test').submit();
+        }
+
+    </script>
+}
+@if (Model.ExcelActive)
+{
+    <form class="text-right pull-right m-t-5 m-r-10" id="frm-excel-@tableId" method="post" data-table-id="@tableId" data-table-no="@Model.datatableNo" action="@(Model.url + "?Excel=true")">
+        <button type="submit" class="btn btn-xs btn-primary pull-right text-right"><i class="fa fa-file-excel-o"></i> Excele Aktar</button>
+        <input type="hidden" id="settings" name="settings" value="" />
+    </form>
+}
