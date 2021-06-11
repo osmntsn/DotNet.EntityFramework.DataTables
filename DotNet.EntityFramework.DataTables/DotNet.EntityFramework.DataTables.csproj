@@ -7,6 +7,8 @@
     <PackageLicenseExpression></PackageLicenseExpression>
     <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
     <Description>Helper library for using Datatables.js serverside in  .Net (.Net Core)</Description>
+    <RepositoryUrl>https://github.com/osmntsn/DotNet.EntityFramework.DataTables</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
   </PropertyGroup>
 
   <ItemGroup>
